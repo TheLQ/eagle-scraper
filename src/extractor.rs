@@ -82,7 +82,7 @@ pub fn extract_video_from_collection(mut content: Vec<u8>) -> SResult<Vec<String
     let json: BorrowedValue = simd_json::to_borrowed_value(&mut content).unwrap();
 
     // jq '.data[] | select(.subtype | contains("VIDEO")) | .id'
-    // jq '.data[] | select(.subtype | contains("VIDEO")) | .video.playback'
+    // jq '.data[] | select(.subtype | contains("VIDEO")) | .video.playback' (alt)
     let data_arr = json
         .get("data")
         .expect("data")

@@ -27,6 +27,7 @@ pub struct FetchResponse {
 }
 
 pub const EXTRACTION_DB_ROOT: &str = "extraction-db";
+pub const VIDEO_DL_NAME: &str = "vid-dl";
 const REQUEST_THROTTLE: Duration = Duration::from_secs(5); // Please be a nice scraper
 
 impl Downloader {
@@ -125,6 +126,7 @@ impl DownType {
             .map(|downtype| path([EXTRACTION_DB_ROOT, &downtype.safe_name()]))
             .collect();
         output_dirs.insert(0, path([EXTRACTION_DB_ROOT]));
+        output_dirs.insert(0, path([EXTRACTION_DB_ROOT, VIDEO_DL_NAME]));
 
         for dir in output_dirs {
             if !dir.exists() {

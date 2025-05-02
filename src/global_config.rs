@@ -4,6 +4,7 @@ use std::path::Path;
 
 pub struct GlobalConfig {
     pub domain: String,
+    pub bc_account_id: String,
 }
 
 impl GlobalConfig {
@@ -20,6 +21,7 @@ impl GlobalConfig {
 
         let config = Self {
             domain: config_map.remove("DOMAIN").unwrap().into(),
+            bc_account_id: config_map.remove("BC_ACCOUNT_ID").unwrap().into(),
         };
         Ok(config)
     }
