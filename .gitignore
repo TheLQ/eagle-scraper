@@ -1,1 +1,3 @@
 /target
+/.env
+/extraction-db

@@ -6,10 +6,9 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 use strum::{AsRefStr, VariantArray};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, trace, warn};
 
 pub struct Downloader {
-    // cache: HashMap<DownType, Vec<PathBuf>>,
     client: reqwest::blocking::Client,
     last_request: Instant,
     config_domain: String,
@@ -25,7 +24,7 @@ pub struct FetchResponse {
     pub output_path: PathBuf,
 }
 
-pub const IMAGE_DB_ROOT: &str = "image-db";
+pub const EXTRACTION_DB_ROOT: &str = "extraction-db";
 const REQUEST_THROTTLE: Duration = Duration::from_secs(5); // Please be a nice scraper
 
 impl Downloader {
@@ -35,12 +34,13 @@ impl Downloader {
 
         Self {
             client: reqwest::blocking::Client::builder()
-                // proxy to MITM warcprox
-                .proxy(Proxy::all(format!("http://{proxy_addr}")).unwrap())
-                // which uses self-signed CA
-                .danger_accept_invalid_certs(true)
+                // // proxy to MITM warcprox
+                // .proxy(Proxy::all(format!("http://{proxy_addr}")).unwrap())
+                // // which uses self-signed CA
+                // .danger_accept_invalid_certs(true)
                 // increase timeout. I think the proxy buffers the whole response first
                 .timeout(Duration::from_mins(3))
+                .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:137.0) Gecko/20100101 Firefox/137.0")
                 .build()
                 .unwrap(),
             // arbitrary old date
@@ -60,7 +60,7 @@ impl Downloader {
             }
         };
 
-        let cache_path = path([IMAGE_DB_ROOT, &downtype.safe_name(), &safe_name]);
+        let cache_path = path([EXTRACTION_DB_ROOT, &downtype.safe_name(), &safe_name]);
         if cache_path.exists() {
             debug!("cached url {url} at {}", cache_path.display());
             Ok(FetchResponse {
@@ -83,7 +83,12 @@ impl Downloader {
                     thread::sleep(sleep_dur);
                 }
 
-                let response = self.client.get(&url).send()?;
+                let request = self.client.get(&url).build()?;
+                trace!("total headers {}", request.headers().len());
+                for (name, value) in request.headers() {
+                    trace!("HEADER {} - {}", name.to_string(), value.to_str().unwrap());
+                }
+                let response = self.client.execute(request)?;
                 if response.status() != StatusCode::OK {
                     panic!("bad response {}", response.status());
                 }
@@ -108,9 +113,9 @@ impl DownType {
     pub fn mkdirs() {
         let mut output_dirs: Vec<PathBuf> = Self::VARIANTS
             .iter()
-            .map(|downtype| path([IMAGE_DB_ROOT, &downtype.safe_name()]))
+            .map(|downtype| path([EXTRACTION_DB_ROOT, &downtype.safe_name()]))
             .collect();
-        output_dirs.insert(0, path([IMAGE_DB_ROOT]));
+        output_dirs.insert(0, path([EXTRACTION_DB_ROOT]));
 
         for dir in output_dirs {
             if !dir.exists() {
