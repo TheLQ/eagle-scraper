@@ -3,7 +3,7 @@
 
 use crate::downloader::{DownType, Downloader};
 use crate::err::{SResult, pretty_panic};
-use crate::extractor::extract_original_id;
+use crate::extractor::{extract_collections_from_root, extract_original_id};
 use crate::global_config::GlobalConfig;
 use std::env;
 use std::process::ExitCode;
@@ -33,6 +33,7 @@ fn _start_scraper() -> SResult<()> {
     DownType::mkdirs();
 
     let root_id = load_root_collection_id(&mut downloader)?;
+    let collection_urls = load_top_collections(&mut downloader, &root_id)?;
 
     Ok(())
 }
@@ -40,6 +41,11 @@ fn _start_scraper() -> SResult<()> {
 fn load_root_collection_id(downloader: &mut Downloader) -> SResult<String> {
     let content = downloader.fetch(DownType::HTML, "")?;
     extract_original_id(&content.body)
+}
+
+fn load_top_collections(downloader: &mut Downloader, root_id: &str) -> SResult<Vec<String>> {
+    let content = downloader.fetch(DownType::Page, root_id)?;
+    extract_collections_from_root(content.body)
 }
 
 fn init_logging() {

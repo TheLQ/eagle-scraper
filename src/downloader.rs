@@ -17,6 +17,8 @@ pub struct Downloader {
 #[derive(Clone, PartialEq, Eq, Hash, VariantArray, AsRefStr)]
 pub enum DownType {
     HTML,
+    Collection,
+    Page,
 }
 
 pub struct FetchResponse {
@@ -58,8 +60,15 @@ impl Downloader {
                 safe_name = format!("page_home");
                 format!("https://{config_domain}/")
             }
+            DownType::Collection => {
+                safe_name = format!("collection_{extra}");
+                format!("https://{config_domain}/api/core/catalog/collection/{extra}")
+            }
+            DownType::Page => {
+                safe_name = format!("frontend_{extra}");
+                format!("https://{config_domain}/api/core/page/{extra}")
+            }
         };
-
         let cache_path = path([EXTRACTION_DB_ROOT, &downtype.safe_name(), &safe_name]);
         if cache_path.exists() {
             debug!("cached url {url} at {}", cache_path.display());
