@@ -3,10 +3,13 @@
 
 use crate::downloader::{DownType, Downloader};
 use crate::err::{SResult, pretty_panic};
-use crate::extractor::{extract_collections_from_root, extract_original_id};
+use crate::extractor::{
+    extract_collections_from_root, extract_original_id, extract_video_from_collection,
+};
 use crate::global_config::GlobalConfig;
 use std::env;
 use std::process::ExitCode;
+use tracing::info;
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -34,7 +37,13 @@ fn _start_scraper() -> SResult<()> {
     DownType::mkdirs();
 
     let root_id = load_root_collection_id(&mut downloader)?;
-    let collection_urls = load_top_collections(&mut downloader, &root_id)?;
+    let collection_ids = load_top_collections(&mut downloader, &root_id)?;
+    let mut all_videos = Vec::new();
+    for collection_id in collection_ids {
+        let videos = load_collection(&mut downloader, &collection_id)?;
+        all_videos.extend(videos);
+    }
+    info!("extracted {} videos", all_videos.len());
 
     Ok(())
 }
@@ -47,6 +56,11 @@ fn load_root_collection_id(downloader: &mut Downloader) -> SResult<String> {
 fn load_top_collections(downloader: &mut Downloader, root_id: &str) -> SResult<Vec<String>> {
     let content = downloader.fetch(DownType::Page, root_id)?;
     extract_collections_from_root(content.body)
+}
+
+fn load_collection(downloader: &mut Downloader, collection_id: &str) -> SResult<Vec<String>> {
+    let content = downloader.fetch(DownType::Collection, collection_id)?;
+    extract_video_from_collection(content.body)
 }
 
 fn init_logging() {

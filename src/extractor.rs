@@ -77,3 +77,35 @@ pub fn extract_collections_from_root(mut content: Vec<u8>) -> SResult<Vec<String
 
     Ok(feeds)
 }
+
+pub fn extract_video_from_collection(mut content: Vec<u8>) -> SResult<Vec<String>> {
+    let json: BorrowedValue = simd_json::to_borrowed_value(&mut content).unwrap();
+
+    // jq '.data[] | select(.subtype | contains("VIDEO")) | .id'
+    // jq '.data[] | select(.subtype | contains("VIDEO")) | .video.playback'
+    let data_arr = json
+        .get("data")
+        .expect("data")
+        .as_array()
+        .expect("data array");
+    let mut video_ids = Vec::new();
+    for item in data_arr {
+        let subtype = item
+            .get("subtype")
+            .expect("subtype")
+            .as_str()
+            .expect("subtype str");
+        let id = match subtype {
+            "GENERIC" => {
+                trace!("skipping generic");
+                continue;
+            }
+            "VIDEO" => item.get("id").expect("id").as_str().expect("id str"),
+            unknown => panic!("unknown id {unknown}"),
+        };
+        trace!("found video {id}");
+        video_ids.push(id.into());
+    }
+
+    Ok(video_ids)
+}
