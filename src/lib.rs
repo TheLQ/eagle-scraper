@@ -1,16 +1,20 @@
 #![feature(duration_constructors)]
 #![feature(error_generic_member_access)]
 
+use crate::downloader::{DownType, Downloader};
+use crate::err::{SResult, pretty_panic};
+use crate::global_config::GlobalConfig;
 use std::env;
 use std::process::ExitCode;
-use tracing_subscriber::{EnvFilter, Registry};
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
-use crate::err::{pretty_panic, SResult};
+use tracing_subscriber::{EnvFilter, Registry};
 
 mod downloader;
 mod err;
+mod extractor;
+mod global_config;
 
 pub fn start_scraper() -> ExitCode {
     init_logging();
@@ -23,6 +27,16 @@ pub fn start_scraper() -> ExitCode {
 }
 
 fn _start_scraper() -> SResult<()> {
+    let global_config = GlobalConfig::load()?;
+    let mut downloader = Downloader::init(&global_config);
+
+    load_root_collection_id(&mut downloader)?;
+
+    Ok(())
+}
+
+fn load_root_collection_id(downloader: &mut Downloader) -> SResult<()> {
+    let content = downloader.fetch(DownType::HTML, "/")?;
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 use crate::err::{SError, SResult};
-use crate::utils::last_position_of;
+use crate::global_config::GlobalConfig;
 use reqwest::{Proxy, StatusCode};
 use std::fs::{create_dir, read, write};
 use std::path::PathBuf;
@@ -12,14 +12,12 @@ pub struct Downloader {
     // cache: HashMap<DownType, Vec<PathBuf>>,
     client: reqwest::blocking::Client,
     last_request: Instant,
+    config_domain: String,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, VariantArray, AsRefStr)]
 pub enum DownType {
-    Photostream,
-    ImageViewer,
-    ImageSizes,
-    ImageOrig,
+    HTML,
 }
 
 pub struct FetchResponse {
@@ -31,7 +29,7 @@ pub const IMAGE_DB_ROOT: &str = "image-db";
 const REQUEST_THROTTLE: Duration = Duration::from_secs(5); // Please be a nice scraper
 
 impl Downloader {
-    pub fn init() -> Self {
+    pub fn init(global_config: &GlobalConfig) -> Self {
         let proxy_addr = std::env::var("WARC_PROXY")
             .expect("Please be nice, export WARC_PROXY=127.0.0.1:8000 pointing to warcprox");
 
@@ -47,33 +45,18 @@ impl Downloader {
                 .unwrap(),
             // arbitrary old date
             last_request: Instant::now() - Duration::from_days(1),
+            config_domain: global_config.domain.clone(),
         }
     }
 
-    pub fn fetch(
-        &mut self,
-        downtype: DownType,
-        for_user: &str,
-        extra: &str,
-    ) -> SResult<FetchResponse> {
+    pub fn fetch(&mut self, downtype: DownType, extra: &str) -> SResult<FetchResponse> {
+        let config_domain = &self.config_domain;
         let safe_name: String;
         let url = match downtype {
-            DownType::Photostream => {
-                safe_name = format!("{for_user}_page{extra}");
-                format!("https://www.flickr.com/photos/{for_user}/page{extra}")
-            }
-            DownType::ImageViewer => {
-                safe_name = format!("{for_user}_{extra}");
-                format!("https://www.flickr.com/photos/{for_user}/{extra}/")
-            }
-            DownType::ImageSizes => {
-                safe_name = format!("{for_user}_{extra}");
-                format!("https://www.flickr.com/photos/{for_user}/{extra}/sizes/o/")
-            }
-            DownType::ImageOrig => {
-                let filename_start = last_position_of(extra, b'/');
-                safe_name = format!("{for_user}_{}", &extra[(filename_start + 1)..]);
-                extra.to_string()
+            DownType::HTML => {
+                assert_eq!(extra, "");
+                safe_name = format!("page_home");
+                format!("https://{config_domain}/")
             }
         };
 

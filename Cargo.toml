@@ -9,3 +9,5 @@ strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.12"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+scraper = "0.23.1"
+simd-json = { version = "0.15.1" }

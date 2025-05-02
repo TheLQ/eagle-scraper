@@ -1,4 +1,4 @@
-# Freedom Scraper
+# Eagle Scraper
 
-Archival of a certain freedom video site
+Archival of a certain eagle fun video site
 
