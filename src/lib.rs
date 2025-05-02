@@ -9,7 +9,6 @@ use crate::extractor::{
 };
 use crate::global_config::GlobalConfig;
 use simd_json::prelude::ArrayTrait;
-use std::borrow::Cow;
 use std::env;
 use std::fs::{create_dir, read_dir};
 use std::process::ExitCode;

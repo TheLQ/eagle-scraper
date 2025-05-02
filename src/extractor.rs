@@ -35,7 +35,7 @@ pub fn extract_collections_from_root(mut content: Vec<u8>) -> SResult<Vec<String
     let json: BorrowedValue = simd_json::to_borrowed_value(&mut content).unwrap();
 
     // jq '.page.containerCollections[]  | .containers[] | .data.feed'
-    let mut container_collections = json
+    let container_collections = json
         .get("page")
         .expect("pages")
         .get("containerCollections")

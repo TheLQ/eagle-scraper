@@ -10,7 +10,7 @@ pub struct GlobalConfig {
 impl GlobalConfig {
     pub fn load() -> SResult<Self> {
         let path = Path::new(".env");
-        let raw = std::fs::read(&path).map_err(SError::io(path))?;
+        let raw = std::fs::read(path).map_err(SError::io(path))?;
 
         let lines = String::from_utf8(raw).unwrap();
         let mut config_map: HashMap<&str, &str> = lines
