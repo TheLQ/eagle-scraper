@@ -1,9 +1,10 @@
 use crate::err::SResult;
+use crate::utils::last_position_of;
 use scraper::{ElementRef, Html, Selector};
 use simd_json::BorrowedValue;
 use simd_json::base::{ValueAsArray, ValueAsScalar};
 use simd_json::derived::ValueObjectAccess;
-use tracing::debug;
+use tracing::{debug, trace};
 
 pub fn extract_original_id(content: &[u8]) -> SResult<String> {
     let document = Html::parse_document(str::from_utf8(content).unwrap());
@@ -59,15 +60,19 @@ pub fn extract_collections_from_root(mut content: Vec<u8>) -> SResult<Vec<String
             .as_str()
             .expect("feed str");
 
-        if feed.contains("watch-history") {
-            debug!("skipping watch {feed}")
+        let feed_url = if feed.contains("watch-history") {
+            debug!("skipping watch {feed}");
+            continue;
         } else if let Some((original, limit)) = feed.split_once("?") {
             debug!("found feed {original} stripped ?{limit} ");
-            feeds.push(original.into());
+            original
         } else {
             debug!("found feed {feed}");
-            feeds.push(feed.into());
-        }
+            feed
+        };
+        let collection_id = &feed_url[(last_position_of(feed_url, b'/') + 1)..];
+        trace!("id {collection_id}");
+        feeds.push(collection_id.into());
     }
 
     Ok(feeds)

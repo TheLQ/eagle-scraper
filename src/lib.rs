@@ -16,6 +16,7 @@ mod downloader;
 mod err;
 mod extractor;
 mod global_config;
+mod utils;
 
 pub fn start_scraper() -> ExitCode {
     init_logging();
