@@ -2,13 +2,15 @@
 #![feature(error_generic_member_access)]
 #![feature(iterator_try_collect)]
 
-use crate::downloader::{DownType, Downloader, EXTRACTION_DB_ROOT, VIDEO_DL_NAME, path};
+use crate::downloader::{
+    BROWSE_NAME, DownType, Downloader, EXTRACTION_DB_ROOT, VIDEO_DL_NAME, path,
+};
 use crate::err::{SError, SResult, pretty_panic};
 use crate::extractor::{
     extract_collections_from_root, extract_original_id, extract_video_from_collection,
 };
 use crate::global_config::GlobalConfig;
-use simd_json::prelude::ArrayTrait;
+use simd_json::prelude::{ArrayTrait, ValueObjectAccessAsScalar};
 use std::env;
 use std::fs::{create_dir, read_dir};
 use std::process::ExitCode;
@@ -50,12 +52,14 @@ fn _start_scraper() -> SResult<()> {
 
     all_videos.sort();
     all_videos.dedup();
+    // I think this was the coolant explosion video
+    all_videos.retain(|v| v != &(1580951021778usize * 4).to_string());
 
     info!("reduced to {} videos", all_videos.len());
 
     let mut ytdl_commands: Vec<String> = vec!["#!/bin/bash".into(), "set -eux".into()];
-    for video_id in all_videos {
-        if let Some(commands) = load_youtube_dl(&global_config, &video_id)? {
+    for video_id in &all_videos {
+        if let Some(commands) = load_youtube_dl(&global_config, video_id)? {
             ytdl_commands.extend(commands);
         }
     }
@@ -67,6 +71,14 @@ fn _start_scraper() -> SResult<()> {
         ytdl_commands.len(),
         ytdl_script_path.display()
     );
+
+    if ytdl_commands.len() == 2 {
+        for video_id in &all_videos {
+            synth_browse_dir(video_id)?;
+        }
+    } else {
+        info!("skip browse synth")
+    }
 
     Ok(())
 }
@@ -153,6 +165,55 @@ fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Opti
     } else {
         Ok(None)
     }
+}
+
+fn synth_browse_dir(video_id: &str) -> SResult<()> {
+    let video_root = path([EXTRACTION_DB_ROOT, VIDEO_DL_NAME, video_id]);
+    if !video_root.exists() {
+        panic!("missing video dl {video_id}")
+    }
+
+    let Some(info_path) = read_dir(&video_root)
+        .map_err(SError::io(&video_root))?
+        .map(|e| e.unwrap())
+        .find(|e| e.file_name().to_string_lossy().ends_with(".info.json"))
+        .map(|e| e.path())
+    else {
+        panic!("missing info.json in {}", video_root.display())
+    };
+    let mut info_raw = std::fs::read(&info_path).map_err(SError::io(info_path))?;
+    let info_json = simd_json::to_borrowed_value(&mut info_raw).unwrap();
+
+    let upload_date = info_json.get_str("upload_date").expect("upload_date");
+    let upload_year = &upload_date[0..4];
+    let upload_month = &upload_date[4..6];
+    let upload_day = &upload_date[6..];
+    let title = info_json.get_str("fulltitle").expect("fulltitle");
+
+    let mut final_name = format!("{upload_year}-{upload_month}-{upload_day} {title}");
+    if final_name.contains(":") {
+        trace!("removing colon from {final_name}");
+        final_name = final_name.replace(":", " -");
+    }
+    let final_path = path([EXTRACTION_DB_ROOT, BROWSE_NAME, &final_name]);
+
+    let needs_create = if final_path.is_symlink() {
+        trace!("skipping existing");
+        false
+    } else if final_path.exists() {
+        panic!("unknown existing {}", final_path.display());
+    } else {
+        true
+    };
+
+    if needs_create {
+        // we need a relative path from here
+        let target = path(["..", VIDEO_DL_NAME, video_id]);
+        info!("linking {} to {}", final_path.display(), target.display());
+        std::os::unix::fs::symlink(&target, &final_path).map_err(SError::io(final_path))?;
+    }
+
+    Ok(())
 }
 
 fn init_logging() {
