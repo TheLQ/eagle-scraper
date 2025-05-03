@@ -41,12 +41,17 @@ fn _start_scraper() -> SResult<()> {
 
     let root_id = load_root_collection_id(&mut downloader)?;
     let collection_ids = load_top_collections(&mut downloader, &root_id)?;
-    let mut all_videos = Vec::new();
+    let mut all_videos: Vec<String> = Vec::new();
     for collection_id in collection_ids {
         let videos = load_collection(&mut downloader, &collection_id)?;
         all_videos.extend(videos);
     }
     info!("extracted {} videos", all_videos.len());
+
+    all_videos.sort();
+    all_videos.dedup();
+
+    info!("reduced to {} videos", all_videos.len());
 
     let mut ytdl_commands: Vec<String> = vec!["#!/bin/bash".into(), "set -eux".into()];
     for video_id in all_videos {
@@ -95,7 +100,7 @@ fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Opti
     }
 
     let children = read_dir(&video_root).map_err(SError::io(&video_root))?;
-    let child_names: Vec<String> = children
+    let mut child_names: Vec<String> = children
         .map(|v| v.map(|v| v.file_name().to_string_lossy().to_string()))
         .try_collect()
         .map_err(SError::io(&video_root))?;
@@ -103,15 +108,33 @@ fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Opti
     let needs_download = if child_names.is_empty() {
         trace!("downloading new video {video_id}");
         true
-    } else if child_names.iter().any(|v| v.contains("mp4")) {
-        if child_names.iter().any(|v| v.contains(".part")) {
-            panic!("remove old part data for {video_id}")
-        } else {
-            trace!("skipping already downloaded {video_id}");
-            false
-        }
+    } else if child_names.len() == 1 && child_names[0] == "ytdl.log" {
+        trace!("retry {video_id}");
+        true
     } else {
-        panic!("not empty but doesn't contain mp4?? {video_id}")
+        let Some(pos) = child_names.iter().position(|v| v.ends_with(".mp4")) else {
+            panic!("missing mp4")
+        };
+        child_names.remove(pos);
+
+        let Some(pos) = child_names.iter().position(|v| v.ends_with(".info.json")) else {
+            panic!("missing mp4")
+        };
+        child_names.remove(pos);
+
+        let Some(pos) = child_names.iter().position(|v| v.ends_with(".jpg")) else {
+            panic!("missing mp4")
+        };
+        child_names.remove(pos);
+
+        // maybe exists
+        child_names.retain(|v| v != "ytdl.log");
+
+        if child_names.is_empty() {
+            false
+        } else {
+            panic!("unknown remaining files {}", child_names.join(","))
+        }
     };
 
     if needs_download {
@@ -123,7 +146,7 @@ fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Opti
         Ok(Some([
             format!("cd {}", full_root.display()),
             format!(
-                "youtube-dl --write-info-json --write-thumbnail --verbose {final_url} | tee ytdl.log"
+                "youtube-dl --write-info-json --write-thumbnail --verbose {final_url} 2>&1 | tee ytdl.log"
             ),
             "sleep 20".into(), // Be a nice scraper
         ]))
