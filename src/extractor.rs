@@ -3,7 +3,7 @@ use crate::utils::last_position_of;
 use scraper::{ElementRef, Html, Selector};
 use simd_json::BorrowedValue;
 use simd_json::base::{ValueAsArray, ValueAsScalar};
-use simd_json::derived::ValueObjectAccess;
+use simd_json::prelude::{ValueObjectAccess, ValueObjectAccessAsArray, ValueObjectAccessAsScalar};
 use tracing::{debug, trace};
 
 pub fn extract_original_id(content: &[u8]) -> SResult<String> {
@@ -22,10 +22,8 @@ pub fn extract_original_id(content: &[u8]) -> SResult<String> {
     let root_id = one_config
         .get("pages")
         .expect("pages")
-        .get("HOME")
-        .expect("HOME")
-        .as_str()
-        .expect("HOME str");
+        .get_str("HOME")
+        .expect("HOME");
     debug!("extracted ROOT URL {root_id}");
 
     Ok(root_id.into())
@@ -38,27 +36,21 @@ pub fn extract_collections_from_root(mut content: Vec<u8>) -> SResult<Vec<String
     let container_collections = json
         .get("page")
         .expect("pages")
-        .get("containerCollections")
-        .expect("containerCollections")
-        .as_array()
-        .expect("containerCollections array");
+        .get_array("containerCollections")
+        .expect("containerCollections");
     assert_eq!(container_collections.len(), 1, "containerCollections len");
     let container_collection = &container_collections[0];
 
     let containers = container_collection
-        .get("containers")
-        .expect("containers")
-        .as_array()
-        .expect("containers array");
+        .get_array("containers")
+        .expect("containers");
     let mut feeds = Vec::new();
     for container in containers {
         let feed = container
             .get("data")
             .expect("data")
-            .get("feed")
-            .expect("feed")
-            .as_str()
-            .expect("feed str");
+            .get_str("feed")
+            .expect("feed");
 
         let feed_url = if feed.contains("watch-history") {
             debug!("skipping watch {feed}");
@@ -83,24 +75,16 @@ pub fn extract_video_from_collection(mut content: Vec<u8>) -> SResult<Vec<String
 
     // jq '.data[] | select(.subtype | contains("VIDEO")) | .id'
     // jq '.data[] | select(.subtype | contains("VIDEO")) | .video.playback' (alt)
-    let data_arr = json
-        .get("data")
-        .expect("data")
-        .as_array()
-        .expect("data array");
+    let data_arr = json.get_array("data").expect("data");
     let mut video_ids = Vec::new();
     for item in data_arr {
-        let subtype = item
-            .get("subtype")
-            .expect("subtype")
-            .as_str()
-            .expect("subtype str");
+        let subtype = item.get_str("subtype").expect("subtype");
         let id = match subtype {
             "GENERIC" => {
                 trace!("skipping generic");
                 continue;
             }
-            "VIDEO" => item.get("id").expect("id").as_str().expect("id str"),
+            "VIDEO" => item.get_str("id").expect("id"),
             unknown => panic!("unknown id {unknown}"),
         };
         trace!("found video {id}");
