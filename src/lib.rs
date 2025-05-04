@@ -7,14 +7,15 @@ use crate::downloader::{
 };
 use crate::err::{SError, SResult, pretty_panic};
 use crate::extractor::{
-    extract_collections_from_root, extract_original_id, extract_video_from_collection,
+    ExtractedThing, ThingType, extract_collections_from_root, extract_original_id,
+    extract_things_from_collection,
 };
 use crate::global_config::GlobalConfig;
 use simd_json::prelude::{ArrayTrait, ValueObjectAccessAsScalar};
 use std::env;
 use std::fs::{create_dir, read_dir};
 use std::process::ExitCode;
-use tracing::{info, trace};
+use tracing::{info, trace, warn};
 use tracing_subscriber::fmt::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -41,21 +42,42 @@ fn _start_scraper() -> SResult<()> {
     let mut downloader = Downloader::init(&global_config);
     DownType::mkdirs();
 
-    let root_id = load_root_collection_id(&mut downloader)?;
-    let collection_ids = load_top_collections(&mut downloader, &root_id)?;
-    let mut all_videos: Vec<String> = Vec::new();
-    for collection_id in collection_ids {
-        let videos = load_collection(&mut downloader, &collection_id)?;
-        all_videos.extend(videos);
+    let mut all_videos: Vec<ExtractedThing> = Vec::new();
+    let mut seen_ids = Vec::new();
+
+    let mut spider = vec![ExtractedThing {
+        next_type: ThingType::Page,
+        next_id: load_root_collection_id(&mut downloader)?,
+        title: "from_root".into(),
+    }];
+    while let Some(cur_thing) = spider.pop() {
+        if seen_ids.contains(&cur_thing.next_id) {
+            // Apparently videos exist in multiple collections
+            assert_eq!(cur_thing.next_type, ThingType::Video);
+
+            warn!("skipping seen id {}", cur_thing.next_id);
+            continue;
+        }
+        seen_ids.push(cur_thing.next_id.clone());
+
+        match cur_thing.next_type {
+            ThingType::Page => {
+                let collections = load_collections_from_page(&mut downloader, &cur_thing.next_id)?;
+                spider.extend(collections);
+            }
+            ThingType::Collection => {
+                let nexts = load_collection(&mut downloader, &cur_thing.next_id)?;
+                spider.extend(nexts)
+            }
+            ThingType::Video => {
+                all_videos.push(cur_thing);
+            }
+        }
     }
     info!("extracted {} videos", all_videos.len());
 
-    all_videos.sort();
-    all_videos.dedup();
     // I think this was the coolant explosion video
-    all_videos.retain(|v| v != &(1580951021778usize * 4).to_string());
-
-    info!("reduced to {} videos", all_videos.len());
+    all_videos.retain(|v| v.next_id != (1580951021778usize * 4).to_string());
 
     let mut ytdl_commands: Vec<String> = vec!["#!/bin/bash".into(), "set -eux".into()];
     for video_id in &all_videos {
@@ -74,7 +96,7 @@ fn _start_scraper() -> SResult<()> {
 
     if ytdl_commands.len() == 2 {
         for video_id in &all_videos {
-            synth_browse_dir(video_id)?;
+            synth_browse_dir(&video_id.next_id)?;
         }
     } else {
         info!("skip browse synth")
@@ -88,17 +110,27 @@ fn load_root_collection_id(downloader: &mut Downloader) -> SResult<String> {
     extract_original_id(&content.body)
 }
 
-fn load_top_collections(downloader: &mut Downloader, root_id: &str) -> SResult<Vec<String>> {
+fn load_collections_from_page(
+    downloader: &mut Downloader,
+    root_id: &str,
+) -> SResult<Vec<ExtractedThing>> {
     let content = downloader.fetch(DownType::Page, root_id)?;
     extract_collections_from_root(content.body)
 }
 
-fn load_collection(downloader: &mut Downloader, collection_id: &str) -> SResult<Vec<String>> {
+fn load_collection(
+    downloader: &mut Downloader,
+    collection_id: &str,
+) -> SResult<Vec<ExtractedThing>> {
     let content = downloader.fetch(DownType::Collection, collection_id)?;
-    extract_video_from_collection(content.body)
+    extract_things_from_collection(content.body)
 }
 
-fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Option<[String; 3]>> {
+fn load_youtube_dl(
+    global_config: &GlobalConfig,
+    video_thing: &ExtractedThing,
+) -> SResult<Option<[String; 4]>> {
+    let video_id = &video_thing.next_id;
     /*
     Shockingly the backend Video ID is the public ID.
     This site `echo qrirybcre.bar.npprqb.gi | tr 'N-ZA-Mn-za-m' 'A-Za-z'` (rot13)
@@ -157,6 +189,7 @@ fn load_youtube_dl(global_config: &GlobalConfig, video_id: &str) -> SResult<Opti
         let full_root = video_root.canonicalize().unwrap();
         Ok(Some([
             format!("cd {}", full_root.display()),
+            format!("echo \"{}\"", video_thing.title),
             format!(
                 "youtube-dl --write-info-json --write-thumbnail --verbose {final_url} 2>&1 | tee ytdl.log"
             ),
