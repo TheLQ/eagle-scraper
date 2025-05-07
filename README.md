@@ -1,6 +1,6 @@
 # Eagle Scraper
 
-Archival of a certain fun eagle-powered video site
+Archival of a certain fun entertainment eagle-powered video site
 
 ## Notes
 

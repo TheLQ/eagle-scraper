@@ -1,5 +1,5 @@
 use crate::err::SResult;
-use crate::utils::last_position_of;
+use crate::utils::{get_only, last_position_of};
 use scraper::{ElementRef, Html, Selector};
 use simd_json::BorrowedValue;
 use simd_json::prelude::{ValueObjectAccess, ValueObjectAccessAsArray, ValueObjectAccessAsScalar};
@@ -9,11 +9,8 @@ pub fn extract_original_id(content: &[u8]) -> SResult<String> {
     let document = Html::parse_document(str::from_utf8(content).unwrap());
 
     let selector = Selector::parse("meta[name=one-data]").unwrap();
-    let mut founds: Vec<ElementRef> = document.select(&selector).collect();
-    if founds.len() != 1 {
-        panic!("missing meta elem?")
-    }
-    let found = founds.remove(0);
+    let founds: Vec<ElementRef> = document.select(&selector).collect();
+    let found = get_only(founds, "missing meta elem?");
 
     let mut one_config_raw: String = found.attr("data-one-config").unwrap().into();
     let one_config: BorrowedValue = unsafe { simd_json::from_str(&mut one_config_raw).unwrap() };
@@ -37,8 +34,7 @@ pub fn extract_collections_from_root(mut content: Vec<u8>) -> SResult<Vec<Extrac
         .expect("pages")
         .get_array("containerCollections")
         .expect("containerCollections");
-    assert_eq!(container_collections.len(), 1, "containerCollections len");
-    let container_collection = &container_collections[0];
+    let container_collection = get_only(container_collections, "containerCollections len");
 
     let containers = container_collection
         .get_array("containers")
@@ -92,8 +88,7 @@ pub fn extract_things_from_collection(mut content: Vec<u8>) -> SResult<Vec<Extra
     for item in data_arr {
         let title = item.get_str("title").expect("title");
         if let Some(actions) = item.get_array("actions") {
-            assert_eq!(actions.len(), 1);
-            let action = &actions[0];
+            let action = get_only(actions, "actions value");
             assert_eq!(action.get_str("kind").expect("kind"), "NAVIGATE_TO_PAGE");
             // both params and parameters? idk pick one
             let id = action
