@@ -76,8 +76,7 @@ fn _start_scraper() -> SResult<()> {
     }
     info!("extracted {} videos", all_videos.len());
 
-    // I think this was the coolant explosion video
-    all_videos.retain(|v| v.next_id != (1580951021778usize * 4).to_string());
+    all_videos.retain(|v| !global_config.missing_videos.contains(&v.next_id));
 
     let mut ytdl_commands: Vec<String> = vec!["#!/bin/bash".into(), "set -eux".into()];
     for video_id in &all_videos {
